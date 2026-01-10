@@ -17,8 +17,9 @@ const ICE_SERVERS = [
 ];
 
 // --- Duo UI Mapping ---
-let localCanvas, remoteCanvas, remoteVideoHidden;
+let localCanvas, remoteCanvas, remoteVideoHidden, sourceVideo;
 let localCtx, remoteCtx;
+let drawLocalActive = false;
 
 // --- State ---
 let socket = null;
@@ -36,12 +37,20 @@ function initARA() {
     localCtx = localCanvas.getContext('2d');
     remoteCtx = remoteCanvas.getContext('2d');
 
-    // Create a hidden video element for the remote peer stream
+    // Hidden video elements
+    sourceVideo = document.getElementById('source-video');
+    sourceVideo.autoplay = true;
+    sourceVideo.playsInline = true;
+    sourceVideo.muted = true;
+
     remoteVideoHidden = document.createElement('video');
     remoteVideoHidden.autoplay = true;
     remoteVideoHidden.playsInline = true;
     remoteVideoHidden.style.display = 'none';
     document.body.appendChild(remoteVideoHidden);
+
+    resizeCanvases();
+    window.addEventListener('resize', resizeCanvases);
 
     // Override UI Button Logic
     document.getElementById('toggle-mic').addEventListener('click', async () => {
@@ -78,15 +87,17 @@ async function startLocalStream() {
     try {
         console.log("Requesting Hardware Access...");
         localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        
-        // Feed the source-video element used by the UI's renderLoop
-        const sourceVideo = document.getElementById('source-video');
+
         sourceVideo.srcObject = localStream;
-        
-        // If we already have peer connections, add the new tracks to them
+
         Object.values(peerConnections).forEach(pc => {
-            localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+            if (localStream) localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
         });
+
+        if (!drawLocalActive) {
+            drawLocalActive = true;
+            requestAnimationFrame(drawLocal);
+        }
 
         document.getElementById('connection-quality').innerText = "🟢 Media Active";
     } catch (err) {
@@ -182,6 +193,25 @@ function drawRemote() {
         remoteCtx.drawImage(remoteVideoHidden, 0, 0, remoteCanvas.width, remoteCanvas.height);
     }
     if (remoteStream) requestAnimationFrame(drawRemote);
+}
+
+function drawLocal() {
+    if (localStream && sourceVideo.readyState >= 2) {
+        localCtx.drawImage(sourceVideo, 0, 0, localCanvas.width, localCanvas.height);
+    }
+    if (drawLocalActive) requestAnimationFrame(drawLocal);
+}
+
+function resizeCanvases() {
+    const dpr = window.devicePixelRatio || 1;
+
+    [localCanvas, remoteCanvas].forEach(canvas => {
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = rect.width * dpr;
+        canvas.height = rect.height * dpr;
+        const ctx = canvas.getContext('2d');
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    });
 }
 
 function leaveMeeting() {
