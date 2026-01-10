@@ -92,7 +92,7 @@ async function startLocalStream() {
 await sourceVideo.play();
 
         Object.values(peerConnections).forEach(pc => {
-            if (localStream) localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+            if (localStream) if (localStream) localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
         });
 
         if (!drawLocalActive) {
