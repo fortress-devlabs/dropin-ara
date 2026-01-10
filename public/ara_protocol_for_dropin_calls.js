@@ -195,16 +195,56 @@ async function handleCandidate(peerId, candidate) {
     if (pc) await pc.addIceCandidate(new RTCIceCandidate(candidate));
 }
 
+function drawVideoCover(ctx, video, canvasW, canvasH) {
+    const videoW = video.videoWidth;
+    const videoH = video.videoHeight;
+
+    if (!videoW || !videoH) return;
+
+    const videoRatio = videoW / videoH;
+    const canvasRatio = canvasW / canvasH;
+
+    let drawW, drawH, offsetX, offsetY;
+
+    if (videoRatio > canvasRatio) {
+        // video wider than canvas
+        drawH = canvasH;
+        drawW = drawH * videoRatio;
+        offsetX = (canvasW - drawW) / 2;
+        offsetY = 0;
+    } else {
+        // video taller than canvas
+        drawW = canvasW;
+        drawH = drawW / videoRatio;
+        offsetX = 0;
+        offsetY = (canvasH - drawH) / 2;
+    }
+
+    ctx.clearRect(0, 0, canvasW, canvasH);
+    ctx.drawImage(video, offsetX, offsetY, drawW, drawH);
+}
+
+
 function drawRemote() {
     if (remoteStream && remoteVideoHidden.readyState >= 2) {
-        remoteCtx.drawImage(remoteVideoHidden, 0, 0, remoteCanvas.width, remoteCanvas.height);
+        drawVideoCover(
+            remoteCtx,
+            remoteVideoHidden,
+            remoteCanvas.width,
+            remoteCanvas.height
+        );
     }
     if (remoteStream) requestAnimationFrame(drawRemote);
 }
 
 function drawLocal() {
     if (localStream && sourceVideo.readyState >= 2) {
-        localCtx.drawImage(sourceVideo, 0, 0, localCanvas.width, localCanvas.height);
+        drawVideoCover(
+            localCtx,
+            sourceVideo,
+            localCanvas.width,
+            localCanvas.height
+        );
     }
     if (drawLocalActive) requestAnimationFrame(drawLocal);
 }
