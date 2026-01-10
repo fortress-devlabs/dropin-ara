@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DropIn Quick Call v1.0.0</title>
+
+<!-- Google Material Icons -->
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined|Material+Icons" rel="stylesheet">
+<!-- Google Fonts: Roboto -->
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&display=swap" rel="stylesheet">
+
+<style>
+    :root {
+        --accent-color: #FFFFFF;       
+        --accent-text: #000000;        
+        --record-red: #D32F2F;         
+        --status-green: #4CAF50;
+        
+        --bg-body: #0A0A0A;            
+        --bg-panel: #141414;           
+        --surface-light: #1E1E1E;      
+        
+        --text-main: #FFFFFF;
+        --text-muted: #757575;         
+        --border-color: #262626;
+        
+        --header-height: 60px;
+        --deck-height: 70px;
+        --rail-width: 80px;
+    }
+
+    * { box-sizing: border-box; user-select: none; outline: none; }
+
+    body {
+        margin: 0; padding: 0;
+        font-family: 'Roboto', sans-serif;
+        background-color: var(--bg-body);
+        color: var(--text-main);
+        height: 100vh; width: 100vw;
+        display: flex; flex-direction: column;
+        overflow: hidden;
+    }
+
+    /* --- Header --- */
+    header {
+        height: var(--header-height); flex-shrink: 0;
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 0 24px; background-color: var(--bg-panel);
+        border-bottom: 1px solid var(--border-color); z-index: 100;
+    }
+
+    .brand-group { display: flex; align-items: center; gap: 12px; }
+    .brand-logo { color: var(--text-main); font-size: 24px; }
+    .brand-name { font-weight: 900; font-size: 1.1rem; letter-spacing: -0.5px; }
+    
+    .call-tag {
+        font-size: 0.65rem; font-weight: 700; color: #000; background: #FFF;
+        padding: 2px 6px; border-radius: 3px; text-transform: uppercase;
+    }
+
+    .session-info { display: flex; align-items: center; gap: 15px; font-size: 0.8rem; color: var(--text-muted); }
+    .live-indicator { display: flex; align-items: center; gap: 6px; color: var(--status-green); font-weight: 700; }
+    .dot { width: 8px; height: 8px; background: var(--status-green); border-radius: 50%; }
+
+    /* --- Layout --- */
+    .cockpit {
+        flex: 1; display: grid;
+        grid-template-columns: var(--rail-width) 1fr 320px;
+        grid-template-rows: minmax(0, 1fr) var(--deck-height);
+        grid-template-areas: "rail stage right" "deck deck deck";
+        overflow: hidden;
+    }
+
+    /* --- Left Rail (Comms) --- */
+    .rail-left {
+        grid-area: rail; background-color: var(--bg-panel);
+        border-right: 1px solid var(--border-color);
+        display: flex; flex-direction: column; align-items: center;
+        padding-top: 20px; gap: 25px;
+    }
+
+    .btn-comms {
+        display: flex; flex-direction: column; align-items: center; gap: 5px;
+        background: none; border: none; cursor: pointer; color: var(--text-muted);
+        transition: 0.2s; width: 100%;
+    }
+
+    .btn-comms .icon-box {
+        width: 44px; height: 44px; border-radius: 12px;
+        background-color: var(--surface-light);
+        display: flex; align-items: center; justify-content: center;
+        border: 1px solid var(--border-color);
+    }
+
+    .btn-comms:hover .icon-box { border-color: #444; color: #fff; }
+    .btn-comms.active .icon-box { background: #fff; color: #000; border-color: #fff; }
+    .btn-comms.active[data-type="record"] .icon-box { background: var(--record-red); color: #fff; border-color: var(--record-red); }
+    
+    .btn-comms span.label { font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+
+    /* --- Main Stage (Duo View) --- */
+    .stage-area {
+        grid-area: stage; background-color: #000;
+        display: grid; grid-template-columns: 1fr 1fr; gap: 2px;
+        padding: 2px; overflow: hidden;
+    }
+
+    .video-node {
+        position: relative; background: #111; overflow: hidden;
+        display: flex; align-items: center; justify-content: center;
+    }
+
+    .node-label {
+        position: absolute; top: 15px; left: 15px; z-index: 50;
+        background: rgba(0,0,0,0.5); padding: 4px 10px; border-radius: 4px;
+        font-size: 0.7rem; font-weight: 700; color: #fff; text-transform: uppercase;
+        border: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .canvas-stack { width: 100%; height: 100%; position: relative; }
+    canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
+
+    /* --- Right Rail (Session & FX) --- */
+    .rail-right {
+        grid-area: right; background-color: var(--bg-panel);
+        border-left: 1px solid var(--border-color);
+        display: flex; flex-direction: column;
+    }
+
+    .panel-section { padding: 20px; border-bottom: 1px solid var(--border-color); }
+    .section-title { font-size: 0.7rem; font-weight: 900; color: var(--text-muted); text-transform: uppercase; margin-bottom: 15px; letter-spacing: 1px; }
+
+    .fx-card {
+        background: var(--surface-light); border: 1px solid var(--border-color);
+        padding: 12px; border-radius: 6px; margin-bottom: 10px; cursor: pointer; transition: 0.2s;
+    }
+    .fx-card:hover { border-color: #555; }
+    .fx-card.active { border-color: #fff; background: #252525; }
+    .fx-card-header { display: flex; align-items: center; gap: 10px; font-size: 0.85rem; font-weight: 700; }
+    .fx-card-desc { font-size: 0.7rem; color: var(--text-muted); margin-top: 4px; line-height: 1.3; }
+
+    /* --- Footer (Command Deck) --- */
+    .command-deck {
+        grid-area: deck; background-color: var(--bg-panel);
+        border-top: 1px solid var(--border-color);
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 0 24px;
+    }
+
+    .btn-end-call {
+        background: var(--record-red); color: #fff; border: none;
+        padding: 10px 24px; border-radius: 4px; font-weight: 900;
+        display: flex; align-items: center; gap: 8px; cursor: pointer;
+        text-transform: uppercase; font-size: 0.8rem;
+    }
+
+    .call-stats { font-family: monospace; font-size: 0.85rem; color: var(--text-muted); }
+
+    /* Onboarding Toast */
+    #onboarding-toast {
+        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+        background: rgba(0,0,0,0.6); z-index: 3000;
+        display: flex; align-items: center; justify-content: center;
+        backdrop-filter: blur(3px);
+    }
+    .toast-card {
+        background: var(--bg-panel); border: 1px solid var(--border-color);
+        padding: 40px; border-radius: 24px; max-width: 420px; text-align: center;
+        box-shadow: 0 40px 80px rgba(0,0,0,0.9);
+    }
+    
+    .toast-brand { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 25px; }
+    .toast-brand .brand-logo { color: var(--text-main); font-size: 28px; }
+    .toast-brand .brand-name { font-weight: 900; font-size: 1.3rem; letter-spacing: -0.5px; }
+    .toast-brand .call-tag { font-size: 0.7rem; font-weight: 700; color: #000; background: #FFF; padding: 2px 6px; border-radius: 3px; text-transform: uppercase; }
+
+    .toast-title { font-size: 1.2rem; font-weight: 700; margin-bottom: 12px; color: #fff; }
+    .toast-body { color: var(--text-muted); font-size: 0.95rem; line-height: 1.5; margin-bottom: 30px; }
+    
+    .invite-area { margin-bottom: 30px; text-align: left; }
+    .invite-label { font-size: 0.7rem; font-weight: 900; color: var(--text-muted); text-transform: uppercase; margin-bottom: 8px; letter-spacing: 1px; display: block; }
+    
+    .invite-box {
+        background: var(--surface-light); padding: 12px; border-radius: 10px;
+        border: 1px solid var(--border-color); display: flex; align-items: center; gap: 10px;
+    }
+    .room-link {
+        flex: 1; font-family: monospace; font-size: 0.85rem; color: #fff;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .btn-copy {
+        background: transparent; border: 1px solid #444; color: #fff;
+        padding: 6px 12px; border-radius: 6px; font-size: 0.7rem; font-weight: 700;
+        cursor: pointer; transition: 0.2s;
+    }
+    .btn-copy:hover { background: #fff; color: #000; }
+
+    .btn-toast {
+        background: #fff; color: #000; border: none; padding: 14px 40px;
+        border-radius: 50px; font-weight: 900; cursor: pointer; text-transform: uppercase; font-size: 0.85rem;
+        width: 100%; transition: transform 0.2s;
+    }
+    .btn-toast:hover { transform: scale(1.02); }
+</style>
+</head>
+<body>
+
+<video id="source-video" autoplay playsinline muted style="display:none"></video>
+
+<div id="onboarding-toast">
+    <div class="toast-card">
+        <div class="toast-brand">
+            <span class="material-icons brand-logo">water_drop</span>
+            <span class="brand-name">DropIn</span>
+            <span class="call-tag">Quick Call</span>
+        </div>
+        <div class="toast-title">Ready to start?</div>
+        <div class="toast-body">
+            Your camera and mic are hidden. Just tap the icons on the left whenever you're ready to jump in!
+        </div>
+        
+        <div class="invite-area">
+            <span class="invite-label">Invite someone</span>
+            <div class="invite-box">
+                <div class="room-link" id="display-url">Loading...</div>
+                <button class="btn-copy" id="btn-copy-link">COPY</button>
+            </div>
+        </div>
+
+        <button class="btn-toast" onclick="document.getElementById('onboarding-toast').style.display='none'">Enter Call</button>
+    </div>
+</div>
+
+<header>
+    <div class="brand-group">
+        <span class="material-icons brand-logo">water_drop</span>
+        <span class="brand-name">DropIn</span>
+        <span class="call-tag">Quick Call v1.0.0</span>
+    </div>
+    <div class="session-info">
+        <div class="live-indicator"><div class="dot"></div> ENCRYPTED</div>
+        <div id="connection-quality">Signal: Excellent</div>
+    </div>
+</header>
+
+<div class="cockpit">
+
+    <!-- COMMS RAIL -->
+    <aside class="rail-left">
+        <button class="btn-comms active" id="toggle-mic">
+            <div class="icon-box"><span class="material-icons-outlined">mic</span></div>
+            <span class="label">Mute</span>
+        </button>
+
+        <button class="btn-comms active" id="toggle-cam">
+            <div class="icon-box"><span class="material-icons-outlined">videocam</span></div>
+            <span class="label">Camera</span>
+        </button>
+        
+        <button class="btn-comms" id="toggle-share">
+            <div class="icon-box"><span class="material-icons-outlined">screen_share</span></div>
+            <span class="label">Share</span>
+        </button>
+
+        <button class="btn-comms" id="toggle-record" data-type="record">
+            <div class="icon-box"><span class="material-icons-outlined">fiber_manual_record</span></div>
+            <span class="label">Record</span>
+        </button>
+    </aside>
+
+    <!-- DUO STAGE -->
+    <main class="stage-area">
+        <!-- Local Stream -->
+        <div class="video-node" id="node-local">
+            <div class="node-label">Local User (You)</div>
+            <div class="canvas-stack">
+                <canvas id="c-local-video"></canvas>
+                <canvas id="c-local-fx"></canvas>
+            </div>
+        </div>
+
+        <!-- Remote Stream -->
+        <div class="video-node" id="node-remote">
+            <div class="node-label">Remote Participant</div>
+            <div class="canvas-stack">
+                <canvas id="c-remote-video"></canvas>
+                <canvas id="c-remote-fx"></canvas>
+            </div>
+            <!-- Zero State for Remote -->
+            <div id="remote-waiting" style="position:absolute; text-align:center; color:var(--text-muted);">
+                <span class="material-icons" style="font-size:48px;">person_add</span>
+                <div style="font-size:0.8rem; margin-top:10px; font-weight:700;">WAITING FOR PEER...</div>
+            </div>
+        </div>
+    </main>
+
+    <!-- SESSION & FX RAIL -->
+    <aside class="rail-right">
+        <div class="panel-section">
+            <div class="section-title">Visual Engine</div>
+            
+            <div class="fx-card active" onclick="setFX('none')">
+                <div class="fx-card-header"><span class="material-icons-outlined">block</span> Raw Input</div>
+                <div class="fx-card-desc">No processing. Pure camera stream.</div>
+            </div>
+
+            <div class="fx-card" onclick="setFX('blur')">
+                <div class="fx-card-header"><span class="material-icons-outlined">blur_on</span> Smart Blur</div>
+                <div class="fx-card-desc">Obscure your background locally.</div>
+            </div>
+
+            <div class="fx-card" onclick="setFX('virtual')">
+                <div class="fx-card-header"><span class="material-icons-outlined">image</span> Virtual Room</div>
+                <div class="fx-card-desc">Replace your environment with a studio.</div>
+            </div>
+        </div>
+
+        <div class="panel-section">
+            <div class="section-title">Recording Status</div>
+            <div id="rec-status" style="font-size: 0.75rem; color: var(--text-muted);">
+                Recorder is currently idle.
+            </div>
+        </div>
+    </aside>
+
+    <!-- FOOTER -->
+    <footer class="command-deck">
+        <div class="call-stats">DURATION: <span id="call-timer">00:00:00</span></div>
+        <button class="btn-end-call" id="btn-hangup">
+            <span class="material-icons">call_end</span> End Session
+        </button>
+    </footer>
+
+</div>
+
+<script>
+    const app = {
+        state: {
+            mic: true,
+            cam: true,
+            sharing: false,
+            recording: false,
+            fxMode: 'none'
+        },
+        
+       init() {
+            this.bindEvents();
+            const url = window.location.href;
+            document.getElementById('display-url').innerText = url;
+            
+            document.getElementById('btn-copy-link').onclick = () => {
+                navigator.clipboard.writeText(url);
+                const btn = document.getElementById('btn-copy-link');
+                btn.innerText = "COPIED!";
+                setTimeout(() => btn.innerText = "COPY", 2000);
+            };
+
+            console.log("DropIn Quick Call UI Ready.");
+        },
+
+        bindEvents() {
+            document.getElementById('toggle-mic').onclick = () => this.toggleState('mic');
+            document.getElementById('toggle-cam').onclick = () => this.toggleState('cam');
+            document.getElementById('toggle-share').onclick = () => this.toggleState('sharing');
+            document.getElementById('toggle-record').onclick = () => this.toggleState('recording');
+            document.getElementById('btn-hangup').onclick = () => confirm("End this call?") && location.reload();
+        },
+
+        toggleState(key) {
+            this.state[key] = !this.state[key];
+            const btn = document.getElementById(`toggle-${key === 'sharing' ? 'share' : key === 'recording' ? 'record' : key}`);
+            btn.classList.toggle('active', this.state[key]);
+            
+            if(key === 'recording') {
+                document.getElementById('rec-status').innerText = this.state.recording ? "REC ● PROCESSING LOCAL" : "Recorder is currently idle.";
+                document.getElementById('rec-status').style.color = this.state.recording ? "var(--record-red)" : "var(--text-muted)";
+            }
+        }
+    };
+
+    function setFX(mode) {
+        app.state.fxMode = mode;
+        const cards = document.querySelectorAll('.fx-card');
+        cards.forEach(c => c.classList.remove('active'));
+        event.currentTarget.classList.add('active');
+        console.log("FX Engine Mode:", mode);
+    }
+
+    app.init();
+</script>
+<!-- Socket.IO Client -->
+<script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
+<!-- ARA WebRTC Protocol -->
+<script src="ara_protocol_for_dropin_calls.js"></script>
+</body>
+</html>
