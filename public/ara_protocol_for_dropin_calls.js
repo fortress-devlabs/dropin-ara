@@ -25,8 +25,9 @@ let drawLocalActive = false;
 let socket = null;
 let roomId = null;
 let localStream = null;
-let peerConnections = {}; 
+let peerConnections = {};
 let remoteStream = null;
+let hasConnectedToServer = false;
 
 function initARA() {
     console.log("ARA WebRTC Protocol Active");
@@ -79,8 +80,8 @@ function initARA() {
     roomId = window.location.hash.substring(1) || Math.random().toString(36).substring(2, 8);
     if (!window.location.hash) window.location.hash = roomId;
 
-    // Connect to server immediately to listen for peers, but DON'T start camera yet
-    connectToServer();
+    // Start camera first, then connect to signaling (prevents peers connecting with zero tracks)
+    startLocalStream();
 }
 
 async function startLocalStream() {
@@ -89,10 +90,15 @@ async function startLocalStream() {
         localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
 
         sourceVideo.srcObject = localStream;
-await sourceVideo.play();
+        await sourceVideo.play();
+
+        if (!hasConnectedToServer) {
+            hasConnectedToServer = true;
+            connectToServer();
+        }
 
         Object.values(peerConnections).forEach(pc => {
-            if (localStream) if (localStream) localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+            localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
         });
 
         if (!drawLocalActive) {
@@ -165,7 +171,7 @@ function createPeer(peerId) {
 async function connectToPeer(peerId, isInitiator) {
     const pc = createPeer(peerId);
     if (isInitiator) {
-        const offer = await pc.createOffer();
+        const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
         await pc.setLocalDescription(offer);
         socket.emit('offer', { targetId: peerId, offer });
     }
