@@ -89,6 +89,7 @@ async function startLocalStream() {
         localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
 
         sourceVideo.srcObject = localStream;
+await sourceVideo.play();
 
         Object.values(peerConnections).forEach(pc => {
             if (localStream) localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
