@@ -207,6 +207,7 @@
 <body>
 
 <video id="source-video" autoplay playsinline muted style="display:none"></video>
+<input type="file" id="file-input" style="display:none" />
 
 <div id="onboarding-toast">
     <div class="toast-card">
@@ -263,10 +264,21 @@
             <span class="label">Share</span>
         </button>
 
-        <button class="btn-comms" id="toggle-record" data-type="record">
-            <div class="icon-box"><span class="material-icons-outlined">fiber_manual_record</span></div>
-            <span class="label">Record</span>
-        </button>
+       <button class="btn-comms" id="toggle-record" data-type="record">
+    <div class="icon-box"><span class="material-icons-outlined">fiber_manual_record</span></div>
+    <span class="label">Record</span>
+</button>
+
+<button class="btn-comms" id="btn-send-file">
+    <div class="icon-box"><span class="material-icons-outlined">attach_file</span></div>
+    <span class="label">Send</span>
+</button>
+
+<button class="btn-comms" id="toggle-file">
+    <div class="icon-box"><span class="material-icons-outlined">attach_file</span></div>
+    <span class="label">Send</span>
+</button>
+
     </aside>
 
     <!-- DUO STAGE -->
@@ -316,12 +328,20 @@
             </div>
         </div>
 
-        <div class="panel-section">
-            <div class="section-title">Recording Status</div>
-            <div id="rec-status" style="font-size: 0.75rem; color: var(--text-muted);">
-                Recorder is currently idle.
-            </div>
-        </div>
+      <div class="panel-section">
+    <div class="section-title">Recording Status</div>
+    <div id="rec-status" style="font-size: 0.75rem; color: var(--text-muted);">
+        Recorder is currently idle.
+    </div>
+</div>
+
+<div class="panel-section">
+    <div class="section-title">File Transfer</div>
+    <div id="file-status" style="font-size:0.75rem;color:var(--text-muted);">
+        Idle
+    </div>
+</div>
+
     </aside>
 
     <!-- FOOTER -->
@@ -365,6 +385,18 @@
             document.getElementById('toggle-share').onclick = () => this.toggleState('sharing');
             document.getElementById('toggle-record').onclick = () => this.toggleState('recording');
             document.getElementById('btn-hangup').onclick = () => confirm("End this call?") && location.reload();
+
+document.getElementById('btn-send-file').onclick = () => {
+    document.getElementById('file-input').click();
+};
+
+document.getElementById('file-input').onchange = e => {
+    const file = e.target.files[0];
+    if (file) {
+        document.getElementById('file-status').innerText = "Sending: " + file.name;
+        sendFile(file);
+    }
+};
         },
 
         toggleState(key) {
