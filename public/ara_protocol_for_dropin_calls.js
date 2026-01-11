@@ -29,6 +29,11 @@ let peerConnections = {};
 let remoteStream = null;
 let hasConnectedToServer = false;
 
+let fileChannel = null;
+let incomingFile = [];
+let incomingFileSize = 0;
+let incomingFileName = "";
+
 function initARA() {
     console.log("ARA WebRTC Protocol Active");
 
@@ -148,8 +153,26 @@ function connectToServer() {
 }
 
 function createPeer(peerId) {
-    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
-    peerConnections[peerId] = pc;
+   const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+peerConnections[peerId] = pc;
+
+/* --- File Transfer DataChannel --- */
+const fileChannel = pc.createDataChannel("dropin-file", {
+    ordered: true
+});
+
+fileChannel.binaryType = "arraybuffer";
+
+fileChannel.onopen = () => {
+    console.log("File channel ready");
+};
+
+fileChannel.onmessage = (e) => {
+    receiveFileChunk(peerId, e.data);
+};
+
+pc._fileChannel = fileChannel;
+
 
     localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 
@@ -157,24 +180,48 @@ function createPeer(peerId) {
         if (e.candidate) socket.emit('ice_candidate', { targetId: peerId, candidate: e.candidate });
     };
 
-    pc.ontrack = (e) => {
-        remoteStream = e.streams[0];
-        remoteVideoHidden.srcObject = remoteStream;
-        document.getElementById('remote-waiting').style.display = 'none';
-        document.getElementById('connection-quality').innerText = "Signal: Strong";
-        requestAnimationFrame(drawRemote);
+   pc.ontrack = (e) => {
+    remoteStream = e.streams[0];
+    remoteVideoHidden.srcObject = remoteStream;
+    document.getElementById('remote-waiting').style.display = 'none';
+    document.getElementById('connection-quality').innerText = "Signal: Strong";
+    requestAnimationFrame(drawRemote);
+};
+
+fileChannel = pc.createDataChannel("file");
+fileChannel.binaryType = "arraybuffer";
+
+fileChannel.onmessage = e => receiveFileChunk(e.data);
+
+
+    pc.ondatachannel = (e) => {
+    const channel = e.channel;
+    channel.binaryType = "arraybuffer";
+
+    channel.onmessage = (evt) => {
+        receiveFileChunk(peerId, evt.data);
     };
 
-    return pc;
+    pc._fileChannel = channel;
+};
+
+return pc;
 }
 
 async function connectToPeer(peerId, isInitiator) {
     const pc = createPeer(peerId);
-    if (isInitiator) {
-        const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
-        await pc.setLocalDescription(offer);
-        socket.emit('offer', { targetId: peerId, offer });
-    }
+ if (isInitiator) {
+    const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
+    await pc.setLocalDescription(offer);
+    socket.emit('offer', { targetId: peerId, offer });
+} else {
+    pc.ondatachannel = e => {
+        fileChannel = e.channel;
+        fileChannel.binaryType = "arraybuffer";
+        fileChannel.onmessage = ev => receiveFileChunk(ev.data);
+    };
+}
+
 }
 
 async function handleOffer(peerId, offer) {
@@ -249,6 +296,40 @@ function drawLocal() {
     if (drawLocalActive) requestAnimationFrame(drawLocal);
 }
 
+/* --- File Transfer Engine --- */
+const incomingFiles = {};
+
+function sendFile(file) {
+    const chunkSize = 16 * 1024;
+    const reader = new FileReader();
+    let offset = 0;
+
+    reader.onload = e => {
+        Object.values(peerConnections).forEach(pc => {
+            if (pc._fileChannel && pc._fileChannel.readyState === "open") {
+                pc._fileChannel.send(e.target.result);
+            }
+        });
+
+        offset += e.target.result.byteLength;
+        if (offset < file.size) {
+            readSlice(offset);
+        }
+    };
+
+    const readSlice = o => {
+        reader.readAsArrayBuffer(file.slice(o, o + chunkSize));
+    };
+
+    readSlice(0);
+}
+
+function receiveFileChunk(peerId, data) {
+    if (!incomingFiles[peerId]) incomingFiles[peerId] = [];
+    incomingFiles[peerId].push(data);
+}
+
+/* --- Canvas Resize --- */
 function resizeCanvases() {
     const dpr = window.devicePixelRatio || 1;
 
@@ -262,11 +343,69 @@ function resizeCanvases() {
 }
 
 function leaveMeeting() {
-    if (!confirm("End this call?")) return;
     Object.values(peerConnections).forEach(pc => pc.close());
     if (socket) socket.disconnect();
     if (localStream) localStream.getTracks().forEach(t => t.stop());
     location.reload();
+}
+
+function sendFile(file) {
+    if (!fileChannel || fileChannel.readyState !== "open") {
+        document.getElementById('file-status').innerText = "Channel unavailable";
+        return;
+    }
+
+    fileChannel.send(JSON.stringify({
+        name: file.name,
+        size: file.size,
+        type: "meta"
+    }));
+
+    const chunkSize = 16384;
+    let offset = 0;
+
+    const reader = new FileReader();
+    reader.onload = e => {
+        fileChannel.send(e.target.result);
+        offset += e.target.result.byteLength;
+
+        if (offset < file.size) {
+            readSlice(offset);
+        }
+    };
+
+    const readSlice = o => {
+        const slice = file.slice(o, o + chunkSize);
+        reader.readAsArrayBuffer(slice);
+    };
+
+    readSlice(0);
+}
+
+function receiveFileChunk(data) {
+    if (typeof data === "string") {
+        const meta = JSON.parse(data);
+        incomingFileName = meta.name;
+        incomingFileSize = meta.size;
+        incomingFile = [];
+        document.getElementById('file-status').innerText = "Receiving: " + incomingFileName;
+        return;
+    }
+
+    incomingFile.push(data);
+
+    const received = incomingFile.reduce((a, b) => a + b.byteLength, 0);
+
+    if (received >= incomingFileSize) {
+        const blob = new Blob(incomingFile);
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = incomingFileName;
+        a.click();
+
+        incomingFile = [];
+        document.getElementById('file-status').innerText = "Received: " + incomingFileName;
+    }
 }
 
 // Start ARA Protocol
