@@ -358,6 +358,34 @@ function leaveMeeting() {
 
 
 
+function sendFile(file) {
+    const statusEl = document.getElementById('file-status');
+    if (statusEl) statusEl.innerText = "Sending: " + file.name;
+
+    const chunkSize = 16384;
+    const reader = new FileReader();
+    let offset = 0;
+
+    reader.onload = e => {
+        Object.values(peerConnections).forEach(pc => {
+            if (pc._fileChannel && pc._fileChannel.readyState === "open") {
+                pc._fileChannel.send(e.target.result);
+            }
+        });
+
+        offset += e.target.result.byteLength;
+        if (offset < file.size) {
+            readSlice(offset);
+        }
+    };
+
+    const readSlice = o => {
+        reader.readAsArrayBuffer(file.slice(o, o + chunkSize));
+    };
+
+    readSlice(0);
+}
+
 // Start ARA Protocol
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initARA);
